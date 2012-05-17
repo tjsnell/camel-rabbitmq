@@ -16,6 +16,7 @@
  */
 package org.apache.camel.component.rabbitmq;
 
+import com.rabbitmq.client.MessageProperties;
 import org.apache.camel.test.junit4.CamelTestSupport;
 import org.junit.Test;
 
@@ -88,8 +89,19 @@ public class RabbitMQConfigurationTest extends CamelTestSupport {
         RabitMQConfiguration config = endpoint.getConfiguration();
         assertTrue(config.getDurable());
         assertTrue(config.getAutoDelete());
-        assertEquals(93, config.getPrefetchCount());
+        assertEquals(93, config.getPrefetch());
         checkBaseConfig(config);
+    }
+
+    @Test
+    public void createEndpointWithMessageProperties() throws Exception {
+        RabbitMQComponent component = new RabbitMQComponent(context);
+        RabbitMQEndpoint endpoint = (RabbitMQEndpoint) component.createEndpoint(BASIC_URI + "?messageProperties=BASIC");
+
+        RabitMQConfiguration config = endpoint.getConfiguration();
+        assertEquals(MessageProperties.BASIC, config.getMessageProperties());
+        checkBaseConfig(config);
+
     }
 
 

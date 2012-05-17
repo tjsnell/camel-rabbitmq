@@ -20,6 +20,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.StringTokenizer;
 
+import com.rabbitmq.client.AMQP;
 import com.rabbitmq.client.SaslConfig;
 
 public class RabitMQConfiguration {
@@ -37,20 +38,27 @@ public class RabitMQConfiguration {
 
     private boolean durable;
     private boolean autoDelete;
+    private boolean autoAck = true;
     /**
      * maximum number of messages that the server will deliver, 0 if unlimited
      */
-    private int prefetchCount;
+    private int prefetch;
 
     private String routingKey = "";
     private String exchange = "";
     private String queue = "";
+
+    private boolean rpc;
 
     // consumer only
     private List<String> bindingKeys = new ArrayList<String>();
 
     private String bindingKey = "";
     private String exchangeType = "";
+
+    private AMQP.BasicProperties properties;
+
+    private RabbitMQClient rabbitMQClient;
 
     public String getUserName() {
         return userName;
@@ -172,12 +180,20 @@ public class RabitMQConfiguration {
         this.autoDelete = autoDelete;
     }
 
-    public int getPrefetchCount() {
-        return prefetchCount;
+    public boolean isAutoAck() {
+        return autoAck;
     }
 
-    public void setPrefetchCount(int prefetchCount) {
-        this.prefetchCount = prefetchCount;
+    public void setAutoAck(boolean autoAck) {
+        this.autoAck = autoAck;
+    }
+
+    public int getPrefetch() {
+        return prefetch;
+    }
+
+    public void setPrefetch(int prefetch) {
+        this.prefetch = prefetch;
     }
 
     public String getRoutingKey() {
@@ -209,15 +225,31 @@ public class RabitMQConfiguration {
         this.exchangeType = exchangeType;
     }
 
-    public String getExchangeTypej() {
-        String type = "fanout";
-        type = "direct";
-        if (bindingKeys.size() > 0) {
-            type = "direct"; // todo when is it a topic?
-        } else if (!routingKey.isEmpty()) {
-            type = "direct";
-        }
-        return type;
+
+    public void setMessageProperties(String propertiesName) {
+        RabbitMQConstants.MessageProperties property = RabbitMQConstants.MessageProperties.valueOf(propertiesName);
+        properties = (AMQP.BasicProperties) property.getProperty();
+    }
+
+    public AMQP.BasicProperties getMessageProperties() {
+        return properties;
+    }
+
+    public RabbitMQClient getRabbitMQClient() {
+        return rabbitMQClient;
+    }
+
+    public void setRabbitMQClient(RabbitMQClient rabbitMQClient) {
+        this.rabbitMQClient = rabbitMQClient;
+    }
+
+
+    public boolean isRpc() {
+        return rpc;
+    }
+
+    public void setRpc(boolean rpc) {
+        this.rpc = rpc;
     }
 
     public String toString() {

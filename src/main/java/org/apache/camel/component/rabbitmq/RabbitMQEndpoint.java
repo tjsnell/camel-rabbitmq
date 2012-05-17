@@ -18,9 +18,15 @@ package org.apache.camel.component.rabbitmq;
 
 import java.io.IOException;
 
+import com.rabbitmq.client.AMQP;
+import com.rabbitmq.client.Channel;
 import com.rabbitmq.client.Connection;
 import com.rabbitmq.client.ConnectionFactory;
+import com.rabbitmq.client.Envelope;
+import com.rabbitmq.client.QueueingConsumer;
+import org.apache.camel.CamelContext;
 import org.apache.camel.Consumer;
+import org.apache.camel.Endpoint;
 import org.apache.camel.Exchange;
 import org.apache.camel.ExchangePattern;
 import org.apache.camel.Message;
@@ -39,6 +45,7 @@ public class RabbitMQEndpoint extends DefaultEndpoint {
     private RabitMQConfiguration configuration;
     private Connection connection;
     private ConnectionFactory factory;
+    private RabbitMQClient client;
 
     public RabbitMQEndpoint() {
     }
@@ -53,6 +60,8 @@ public class RabbitMQEndpoint extends DefaultEndpoint {
     public Producer createProducer() throws Exception {
         return new RabbitMQProducer(this);
     }
+
+
 
     @Override
     public Consumer createConsumer(Processor processor) throws Exception {
@@ -69,16 +78,66 @@ public class RabbitMQEndpoint extends DefaultEndpoint {
         }
     }
 
+
+    public QueueingConsumer getConsumer(Channel channel) throws InterruptedException{
+        return getClient().getQueueingConsumer(channel);
+    }
+
     public Exchange createExchange(RabbitMQMessage msg) {
         return createExchange(getExchangePattern(), msg);
     }
 
-    private Exchange createExchange(ExchangePattern pattern, RabbitMQMessage msg) {
+    private Exchange createExchange(ExchangePattern pattern, RabbitMQMessage rabbitMQMessage) {
         Exchange exchange = new DefaultExchange(this, pattern);
         Message message = exchange.getIn();
-        message.setBody(msg.getBody());
+        message.setBody(rabbitMQMessage.getBody());
 
+        setEnvelopeHeaders(rabbitMQMessage.getEnvelope(), message);
+        setPropertiesHeaders(rabbitMQMessage.getProperties(), message);
+
+        message.setHeader(RabbitMQConstants.ENDPOINT_ID, getId());
+
+        CamelContext ctx = getCamelContext();
+
+        for (Endpoint ep : ctx.getEndpoints()) {
+            if (ep instanceof DefaultEndpoint) {
+//                System.out.println("id: " + ((DefaultEndpoint)ep).getId());
+            }
+        }
         return exchange;
+    }
+
+    /**
+     * Map the AMQP Properties to headers
+     * @param properties AMQP Properties
+     * @param message Message to set the headers on
+     */
+    private void setPropertiesHeaders(AMQP.BasicProperties properties, Message message) {
+        setHeader(RabbitMQConstants.CONTENT_TYPE, properties.getContentType(), message);
+        setHeader(RabbitMQConstants.CONTENT_ENCODING, properties.getContentEncoding(), message);
+        setHeader(RabbitMQConstants.DELIVERY_MODE, properties.getDeliveryMode(), message);
+        setHeader(RabbitMQConstants.PRIORITY, properties.getPriority(), message);
+        setHeader(RabbitMQConstants.CORRELATION_ID, properties.getCorrelationId(), message);
+        setHeader(RabbitMQConstants.REPLY_TO, properties.getReplyTo(), message);
+        setHeader(RabbitMQConstants.EXPIRATION, properties.getExpiration(), message);
+        setHeader(RabbitMQConstants.MESSAGE_ID, properties.getMessageId(), message);
+        setHeader(RabbitMQConstants.TIMESTAMP, properties.getTimestamp(), message);
+        setHeader(RabbitMQConstants.TYPE, properties.getType(), message);
+        setHeader(RabbitMQConstants.USER_ID, properties.getUserId(), message);
+        setHeader(RabbitMQConstants.APP_ID, properties.getAppId(), message);
+        setHeader(RabbitMQConstants.CLUSTER_ID, properties.getClusterId(), message);
+    }
+
+    private void setHeader(String name, Object value, Message message) {
+        if (value != null) {
+            message.setHeader(name, value);
+        }
+    }
+
+    private void setEnvelopeHeaders(Envelope envelope, Message message) {
+        message.setHeader(RabbitMQConstants.DELIVERY_TAG, envelope.getDeliveryTag());
+        message.setHeader(RabbitMQConstants.EXCHANGE, envelope.getExchange());
+        message.setHeader(RabbitMQConstants.ROUTING_KEY, envelope.getRoutingKey());
     }
 
     public boolean isSingleton() {
@@ -87,6 +146,19 @@ public class RabbitMQEndpoint extends DefaultEndpoint {
 
     public RabitMQConfiguration getConfiguration() {
         return configuration;
+    }
+
+
+    public RabbitMQClient getClient() {
+        if (client == null) {
+            client = getConfiguration().getRabbitMQClient() != null
+                ? getConfiguration().getRabbitMQClient() : new RabbitMQClient();
+        }
+        return client;
+    }
+
+    public void setClient(RabbitMQClient client) {
+        this.client = client;
     }
 
     @Override
@@ -100,7 +172,7 @@ public class RabbitMQEndpoint extends DefaultEndpoint {
 
     private void createConnection() throws IOException {
 
-        factory = new ConnectionFactory();
+        factory = getClient().getConnectionFactory();
 
         factory.setHost(configuration.getHost());
         if (configuration.getUserName() != null) {
@@ -121,7 +193,6 @@ public class RabbitMQEndpoint extends DefaultEndpoint {
 
         connection = factory.newConnection();
     }
-
 
 
     public Connection getConnection() {

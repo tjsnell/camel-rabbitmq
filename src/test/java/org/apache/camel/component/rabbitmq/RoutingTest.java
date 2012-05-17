@@ -23,6 +23,7 @@ import org.apache.camel.Processor;
 import org.apache.camel.ProducerTemplate;
 import org.apache.camel.builder.RouteBuilder;
 import org.apache.camel.component.mock.MockEndpoint;
+import org.apache.camel.impl.JndiRegistry;
 import org.apache.camel.test.junit4.CamelTestSupport;
 import org.junit.Test;
 
@@ -48,6 +49,7 @@ public class RoutingTest extends CamelTestSupport {
 
     @Test
     public void errorSubscription() throws Exception {
+
         result.expectedMessageCount(1);
 
         Exchange exchange = templateError.send("direct:start_error", ExchangePattern.InOnly, new Processor() {
@@ -81,6 +83,29 @@ public class RoutingTest extends CamelTestSupport {
 
 
     @Test
+    public void warnBatchSubscription() throws Exception {
+        resultWarn.expectedMessageCount(2);
+
+        Exchange exchange = templateWarn.send("direct:start_warn", ExchangePattern.InOnly, new Processor() {
+            public void process(Exchange exchange) throws Exception {
+                exchange.getIn().setBody("This is my message text.");
+            }
+        });
+
+        exchange = templateWarn.send("direct:start_warn", ExchangePattern.InOnly, new Processor() {
+            public void process(Exchange exchange) throws Exception {
+                exchange.getIn().setBody("222222 This is my message text.");
+            }
+        });
+
+        assertMockEndpointsSatisfied();
+
+        Exchange resultExchange = resultWarn.getExchanges().get(0);
+        assertEquals("This is my message text.", resultExchange.getIn().getBody());
+    }
+
+
+    @Test
     public void warnSubscription() throws Exception {
         resultWarn.expectedMessageCount(1);
 
@@ -108,8 +133,20 @@ public class RoutingTest extends CamelTestSupport {
 
         assertMockEndpointsSatisfied();
 
-        assertEquals(0,resultNo.getExchanges().size());
+        assertEquals(0, resultNo.getExchanges().size());
     }
+
+
+    @Override
+    protected JndiRegistry createRegistry() throws Exception {
+        JndiRegistry registry = super.createRegistry();
+
+        RabbitMQClient client = new RabbitMQClientMock();
+        registry.bind("rabbitMQClient", client);
+
+        return registry;
+    }
+
 
 
     @Override
@@ -136,6 +173,14 @@ public class RoutingTest extends CamelTestSupport {
                     .to(baseURI + "&routingKey=error&exchangeType=direct");
 
                 from("direct:start_warn")
+                    .process(new Processor() {
+                        public void process(Exchange exchange) throws Exception {
+                            if (Math.random() > 0.5) {
+                                throw new Exception("ABORT");
+                            }
+                        }
+                    })
+                    .setBody().simple("${in.body}")
                     .to(baseURI + "&routingKey=warn&exchangeType=direct");
             }
         };
