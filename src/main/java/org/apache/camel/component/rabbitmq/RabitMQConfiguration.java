@@ -58,6 +58,8 @@ public class RabitMQConfiguration {
 
     private AMQP.BasicProperties properties;
 
+    private int concurrentConsumers;
+
     private RabbitMQClient rabbitMQClient;
 
     public String getUserName() {
@@ -250,6 +252,14 @@ public class RabitMQConfiguration {
 
     public void setRpc(boolean rpc) {
         this.rpc = rpc;
+    }
+
+    public int getConcurrentConsumers() {
+        return concurrentConsumers;
+    }
+
+    public void setConcurrentConsumers(int concurrentConsumers) {
+        this.concurrentConsumers = concurrentConsumers;
     }
 
     public String toString() {
