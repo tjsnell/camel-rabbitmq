@@ -22,10 +22,13 @@ import com.rabbitmq.client.AMQP;
 import com.rabbitmq.client.Channel;
 import com.rabbitmq.client.Connection;
 import com.rabbitmq.client.QueueingConsumer;
+import org.apache.camel.AsyncCallback;
+import org.apache.camel.AsyncProcessor;
 import org.apache.camel.Exchange;
 import org.apache.camel.Message;
 import org.apache.camel.impl.DefaultProducer;
 import org.apache.camel.spi.UuidGenerator;
+import org.apache.camel.util.AsyncProcessorHelper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -34,16 +37,14 @@ import org.slf4j.LoggerFactory;
  */
 // todo Send to a routingKey that doesn't exist so you get a published but not routed result add check for it
 
-public class RabbitMQProducer extends DefaultProducer {
+public class RabbitMQProducer extends DefaultProducer implements AsyncProcessor {
     private static final transient Logger LOG = LoggerFactory.getLogger(RabbitMQProducer.class);
-    private RabbitMQEndpoint endpoint;
     private Channel channel;
     private QueueingConsumer consumer;
 
 
     public RabbitMQProducer(RabbitMQEndpoint endpoint) {
         super(endpoint);
-        this.endpoint = endpoint;
 
     }
 
@@ -57,11 +58,28 @@ public class RabbitMQProducer extends DefaultProducer {
         super.doStop();
     }
 
+
+    @Override
     public void process(Exchange exchange) throws Exception {
+        AsyncProcessorHelper.process(this, exchange);
+    }
+
+    @Override
+    public boolean process(Exchange exchange, AsyncCallback asyncCallback) {
+        try {
+            send(exchange);
+
+        } catch (Exception e) {
+
+        }
+        return true;
+    }
+
+    public void send(Exchange exchange) throws Exception {
 
         String body = exchange.getIn().getBody(String.class);
         LOG.trace("Sending request [{}] from exchange [{}]...", body, exchange);
-        RabbitMQConfiguration config = endpoint.getConfiguration();
+        RabbitMQConfiguration config = getEndpoint().getConfiguration();
         createChannel();
         String routingKey = getRoutingKey(exchange.getIn(), config);
 
@@ -100,25 +118,28 @@ public class RabbitMQProducer extends DefaultProducer {
                 throw new Exception("Message body is null");
             }
             channel.basicPublish(config.getExchange(), routingKey, config.getMessageProperties(), body.getBytes());
-            // todo figure out why this crashes after 65535 publishes
         }
 
         Message message = getMessageForResponse(exchange);
     }
 
 
+    @Override
+    public RabbitMQEndpoint getEndpoint() {
+        return (RabbitMQEndpoint) super.getEndpoint();
+    }
 
     private void createChannel() throws Exception {
         if (channel == null) {
 
-            Connection connection = endpoint.getConnection();
-            RabbitMQConfiguration config = endpoint.getConfiguration();
+            Connection connection = getEndpoint().getConnection();
+            RabbitMQConfiguration config = getEndpoint().getConfiguration();
 
             channel = connection.createChannel();
 
-            System.out.println("-------------- Producer ----------------------");
+            System.out.println("-------------- Producer -----------------");
             System.out.println(config.toString());
-            System.out.println("------------------------------------");
+            System.out.println("-----------------------------------------");
 
             if (!config.getExchange().isEmpty()) {
                 channel.exchangeDeclare(config.getExchange(), config.getExchangeType());
@@ -178,5 +199,6 @@ public class RabbitMQProducer extends DefaultProducer {
 
         return exchange.getIn();
     }
+
 
 }

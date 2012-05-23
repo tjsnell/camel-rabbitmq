@@ -39,7 +39,6 @@ public class RabbitMQConsumer extends DefaultConsumer {
     private final RabbitMQEndpoint endpoint;
     //    private Channel channel;
     private String queueName;
-    private Channel replyChannel;
     private MyConsumer myConsumer;
 
 
@@ -145,6 +144,7 @@ public class RabbitMQConsumer extends DefaultConsumer {
     private class Completion implements Synchronization {
 
         Channel channel;
+        private Channel replyChannel;
 
         public Completion(Channel channel) {
             this.channel = channel;
