@@ -17,59 +17,71 @@
 package org.apache.camel.component.rabbitmq;
 
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Queue;
 
 import com.rabbitmq.client.AMQP;
 import com.rabbitmq.client.Channel;
 import com.rabbitmq.client.Connection;
-import com.rabbitmq.client.QueueingConsumer;
+import com.rabbitmq.client.Envelope;
 import org.apache.camel.Exchange;
+import org.apache.camel.Message;
 import org.apache.camel.Processor;
-import org.apache.camel.impl.ScheduledBatchPollingConsumer;
+import org.apache.camel.impl.DefaultConsumer;
 import org.apache.camel.spi.Synchronization;
-import org.apache.camel.util.CastUtils;
-import org.apache.camel.util.ObjectHelper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
  * The RabbitMQ consumer.
  */
-public class RabbitMQConsumer extends ScheduledBatchPollingConsumer {
+public class RabbitMQConsumer extends DefaultConsumer {
     private static final transient Logger LOG = LoggerFactory.getLogger(RabbitMQConsumer.class);
 
     private final RabbitMQEndpoint endpoint;
-    private Channel channel;
-    private QueueingConsumer consumer;
+    //    private Channel channel;
     private String queueName;
-    private boolean rpc;
     private Channel replyChannel;
+    private MyConsumer myConsumer;
+
 
     public RabbitMQConsumer(RabbitMQEndpoint endpoint, Processor processor) throws Exception {
         super(endpoint, processor);
         this.endpoint = endpoint;
         setupMQ();
-        // todo
-        rpc = true;
+
+        final RabbitMQConfiguration config = endpoint.getConfiguration();
+        for (int i = 0; i < config.getConcurrentConsumers(); i++) {
+            Runnable consumerThread = new Runnable() {
+                @Override
+                public void run() {
+                    try {
+                        Channel channel = createChannel();
+                        myConsumer = new MyConsumer(channel);
+                        channel.basicConsume(queueName, config.isAutoAck(), myConsumer);
+                    } catch (IOException e) {
+                        e.printStackTrace();
+                    }
+                }
+            };
+            Thread thread = new Thread(consumerThread);
+            thread.start();
+        }
     }
 
     private void setupMQ() throws Exception {
         createChannel();
 
-        RabitMQConfiguration config = endpoint.getConfiguration();
+        RabbitMQConfiguration config = endpoint.getConfiguration();
 
         System.out.println("========== Consumer ======================");
         System.out.println(config.toString());
         System.out.println("================================");
 
+        Channel channel = createChannel();
         if (!config.getExchange().isEmpty()) {
             channel.exchangeDeclare(config.getExchange(), config.getExchangeType());
             queueName = channel.queueDeclare().getQueue();
             if (config.getBindingKeys().size() > 0) {
-                setBindingKeys(config);
+                setBindingKeys(config, channel);
             } else {
                 channel.queueBind(queueName, config.getExchange(), "");
             }
@@ -77,74 +89,72 @@ public class RabbitMQConsumer extends ScheduledBatchPollingConsumer {
             queueName = config.getQueue();
             channel.queueDeclare(queueName, config.getDurable(), false, false, null);
         }
-        consumer = endpoint.getConsumer(channel);
     }
 
-    private void setBindingKeys(RabitMQConfiguration config) throws IOException {
+    @Override
+    protected void doStart() {
+
+    }
+
+    @Override
+    protected void doStop() {
+
+    }
+
+    private void setBindingKeys(RabbitMQConfiguration config, Channel channel) throws IOException {
         for (String bindingKey : config.getBindingKeys()) {
             channel.queueBind(queueName, config.getExchange(), bindingKey);
         }
     }
 
-    @Override
-    protected int poll() throws Exception {
-        channel.basicConsume(queueName, endpoint.getConfiguration().isAutoAck(), consumer);
-        List<RabbitMQMessage> messages = consumeMessages(consumer);
-        LOG.trace("Received {} messages", messages.size());
 
-        Queue<Exchange> exchanges = createExchanges(messages);
-        // todo  channel.close();
-        return processBatch(CastUtils.cast(exchanges));
-    }
+    public class MyConsumer extends com.rabbitmq.client.DefaultConsumer {
 
-    private List<RabbitMQMessage> consumeMessages(QueueingConsumer consumer) throws InterruptedException {
-        List<RabbitMQMessage> messages = new ArrayList<RabbitMQMessage>();
-
-        QueueingConsumer.Delivery delivery = consumer.nextDelivery(50);
-        while (delivery != null) {
-            RabbitMQMessage message = new RabbitMQMessage();
-            message.setBody(new String(delivery.getBody()));
-            message.setEnvelope(delivery.getEnvelope());
-            message.setProperties(delivery.getProperties());
-            messages.add(message);
-            delivery = consumer.nextDelivery(50);
-        }
-        return messages;
-    }
-
-    @Override
-    public int processBatch(Queue<Object> exchanges) throws Exception {
-        int total = exchanges.size();
-
-        for (int index = 0; index < total && isBatchAllowed(); index++) {
-            // only loop if we are started (allowed to run)
-            Exchange exchange = ObjectHelper.cast(Exchange.class, exchanges.poll());
-            // add current index and total as properties
-            exchange.setProperty(Exchange.BATCH_INDEX, index);
-            exchange.setProperty(Exchange.BATCH_SIZE, total);
-            exchange.setProperty(Exchange.BATCH_COMPLETE, index == total - 1);
-
-            // update pending number of exchanges
-            pendingExchanges = total - index - 1;
-
-            // add on completion to handle after work when the exchange is done
-            exchange.addOnCompletion(new Synch());
-
-            LOG.trace("Processing exchange [{}]...", exchange);
-
-            getProcessor().process(exchange);
+        Channel channel;
+        /**
+         * Constructs a new instance and records its association to the passed-in channel.
+         *
+         * @param channel the channel to which this consumer is attached
+         */
+        public MyConsumer(Channel channel) {
+            super(channel);
+            this.channel = channel;
         }
 
-        return total;
+        @Override
+        public void handleDelivery(String consumerTag,
+                                   Envelope envelope,
+                                   AMQP.BasicProperties properties,
+                                   byte[] body) throws IOException {
+            String routingKey = envelope.getRoutingKey();
+            String contentType = properties.getContentType();
+            long deliveryTag = envelope.getDeliveryTag();
+
+            Exchange exchange = endpoint.createExchange(envelope, properties, body);
+
+            exchange.addOnCompletion(new Completion(channel));
+            try {
+                getProcessor().process(exchange);
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        }
     }
 
-    private class Synch implements Synchronization {
+
+    private class Completion implements Synchronization {
+
+        Channel channel;
+
+        public Completion(Channel channel) {
+            this.channel = channel;
+        }
 
         @Override
         public void onComplete(Exchange exchange) {
             try {
-                System.out.println("***************************************************************");
-                long tag = exchange.getIn().getHeader(RabbitMQConstants.DELIVERY_TAG, Long.class);
+                Message in = exchange.getIn();
+                long tag = in.getHeader(RabbitMQConstants.DELIVERY_TAG, Long.class);
                 if (!endpoint.getConfiguration().isAutoAck()) {
                     try {
                         channel.basicAck(tag, false);
@@ -160,7 +170,6 @@ public class RabbitMQConsumer extends ScheduledBatchPollingConsumer {
                         .correlationId(correlationId)
                         .build();
 
-                    System.out.println(")()()()()()()()( Sending Reply to: " + replyTo);
                     if (replyChannel == null) {
                         replyChannel = createReplyChannel();
                     }
@@ -168,28 +177,18 @@ public class RabbitMQConsumer extends ScheduledBatchPollingConsumer {
                     replyChannel.basicAck(tag, false);
                 }
             } catch (Exception e) {
+                System.out.println(e);
+                e.printStackTrace();
             }
 
         }
 
         @Override
         public void onFailure(Exchange exchange) {
-
+            System.out.println("^^^^^^^^^^^^^FAIL");
         }
     }
 
-
-    private Queue<Exchange> createExchanges(List<RabbitMQMessage> messages) {
-        LOG.trace("Received {} messages in this poll", messages.size());
-
-        Queue<Exchange> answer = new LinkedList<Exchange>();
-        for (RabbitMQMessage message : messages) {
-            Exchange exchange = endpoint.createExchange(message);
-            answer.add(exchange);
-        }
-
-        return answer;
-    }
 
     /**
      * Strategy to delete the message after being processed.
@@ -220,13 +219,14 @@ public class RabbitMQConsumer extends ScheduledBatchPollingConsumer {
         return connection.createChannel();
     }
 
-    private void createChannel() throws IOException {
+    private Channel createChannel() throws IOException {
         Connection connection = endpoint.getConnection();
-        RabitMQConfiguration configuration = endpoint.getConfiguration();
+        RabbitMQConfiguration configuration = endpoint.getConfiguration();
 
-        channel = connection.createChannel();
+        Channel channel = connection.createChannel();
 
         channel.basicQos(configuration.getPrefetch());
+        return channel;
     }
 
 }

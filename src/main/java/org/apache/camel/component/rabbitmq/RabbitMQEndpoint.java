@@ -28,7 +28,6 @@ import org.apache.camel.CamelContext;
 import org.apache.camel.Consumer;
 import org.apache.camel.Endpoint;
 import org.apache.camel.Exchange;
-import org.apache.camel.ExchangePattern;
 import org.apache.camel.Message;
 import org.apache.camel.Processor;
 import org.apache.camel.Producer;
@@ -42,7 +41,7 @@ import org.slf4j.LoggerFactory;
  */
 public class RabbitMQEndpoint extends DefaultEndpoint {
     private static final transient Logger LOG = LoggerFactory.getLogger(RabbitMQEndpoint.class);
-    private RabitMQConfiguration configuration;
+    private RabbitMQConfiguration configuration;
     private Connection connection;
     private ConnectionFactory factory;
     private RabbitMQClient client;
@@ -50,7 +49,7 @@ public class RabbitMQEndpoint extends DefaultEndpoint {
     public RabbitMQEndpoint() {
     }
 
-    public RabbitMQEndpoint(String uri, RabbitMQComponent component, RabitMQConfiguration configuration) {
+    public RabbitMQEndpoint(String uri, RabbitMQComponent component, RabbitMQConfiguration configuration) {
         super(uri, component);
         this.configuration = configuration;
     }
@@ -60,7 +59,6 @@ public class RabbitMQEndpoint extends DefaultEndpoint {
     public Producer createProducer() throws Exception {
         return new RabbitMQProducer(this);
     }
-
 
 
     @Override
@@ -79,21 +77,18 @@ public class RabbitMQEndpoint extends DefaultEndpoint {
     }
 
 
-    public QueueingConsumer getConsumer(Channel channel) throws InterruptedException{
+    public QueueingConsumer getConsumer(Channel channel) throws InterruptedException {
         return getClient().getQueueingConsumer(channel);
     }
 
-    public Exchange createExchange(RabbitMQMessage msg) {
-        return createExchange(getExchangePattern(), msg);
-    }
 
-    private Exchange createExchange(ExchangePattern pattern, RabbitMQMessage rabbitMQMessage) {
-        Exchange exchange = new DefaultExchange(this, pattern);
+    public Exchange createExchange(Envelope envelope, AMQP.BasicProperties props, byte[] body) {
+        Exchange exchange = new DefaultExchange(this, getExchangePattern());
         Message message = exchange.getIn();
-        message.setBody(rabbitMQMessage.getBody());
+        message.setBody(body);
 
-        setEnvelopeHeaders(rabbitMQMessage.getEnvelope(), message);
-        setPropertiesHeaders(rabbitMQMessage.getProperties(), message);
+        setEnvelopeHeaders(envelope, message);
+        setPropertiesHeaders(props, message);
 
         message.setHeader(RabbitMQConstants.ENDPOINT_ID, getId());
 
@@ -105,12 +100,15 @@ public class RabbitMQEndpoint extends DefaultEndpoint {
             }
         }
         return exchange;
+
     }
+
 
     /**
      * Map the AMQP Properties to headers
+     *
      * @param properties AMQP Properties
-     * @param message Message to set the headers on
+     * @param message    Message to set the headers on
      */
     private void setPropertiesHeaders(AMQP.BasicProperties properties, Message message) {
         setHeader(RabbitMQConstants.CONTENT_TYPE, properties.getContentType(), message);
@@ -144,7 +142,7 @@ public class RabbitMQEndpoint extends DefaultEndpoint {
         return true;
     }
 
-    public RabitMQConfiguration getConfiguration() {
+    public RabbitMQConfiguration getConfiguration() {
         return configuration;
     }
 
@@ -183,8 +181,8 @@ public class RabbitMQEndpoint extends DefaultEndpoint {
         }
 
         if (configuration.getVirtualHost() != null) {
-            // todo this causes odd errors
-            //     factory.setVirtualHost(configuration.getVirtualHost());
+            // todo if the vhost doesn't exist this throws an exception on newConnection
+//            factory.setVirtualHost(configuration.getVirtualHost());
         }
 
         if (configuration.getPort() != 0) {

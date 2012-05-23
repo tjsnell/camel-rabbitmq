@@ -23,7 +23,7 @@ import java.util.StringTokenizer;
 import com.rabbitmq.client.AMQP;
 import com.rabbitmq.client.SaslConfig;
 
-public class RabitMQConfiguration {
+public class RabbitMQConfiguration {
     private String userName;
     private String password;
     private String uri; //todo maybe not?
@@ -58,7 +58,7 @@ public class RabitMQConfiguration {
 
     private AMQP.BasicProperties properties;
 
-    private int concurrentConsumers;
+    private int concurrentConsumers = 1;
 
     private RabbitMQClient rabbitMQClient;
 
@@ -282,6 +282,10 @@ public class RabitMQConfiguration {
         str.append(bindingKeys);
         str.append("\n\tDurable: ");
         str.append(durable);
+        str.append("\n\tVirtural Host: ");
+        str.append(virtualHost);
+        str.append("\n\tConcurrent Consumers: ");
+        str.append(concurrentConsumers);
 
         return str.toString();
     }

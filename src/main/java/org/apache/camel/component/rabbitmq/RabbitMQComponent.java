@@ -38,7 +38,7 @@ public class RabbitMQComponent extends DefaultComponent {
     }
 
     protected Endpoint createEndpoint(String uri, String remaining, Map<String, Object> parameters) throws Exception {
-        RabitMQConfiguration configuration = new RabitMQConfiguration();
+        RabbitMQConfiguration configuration = new RabbitMQConfiguration();
         setProperties(configuration, parameters);
 
         if (remaining == null || remaining.trim().length() == 0) {
@@ -54,7 +54,7 @@ public class RabbitMQComponent extends DefaultComponent {
         return endpoint;
     }
 
-    private void configure(RabitMQConfiguration config, URI uri) {
+    private void configure(RabbitMQConfiguration config, URI uri) {
         // UserInfo can contain both username and password as: user:pwd@ftpserver
         // see: http://en.wikipedia.org/wiki/URI_scheme
         String username = uri.getUserInfo();

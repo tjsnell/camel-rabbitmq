@@ -45,4 +45,5 @@ public interface RabbitMQConstants {
             return property;
         }
     }
+
 }

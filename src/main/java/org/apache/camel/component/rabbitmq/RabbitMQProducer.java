@@ -17,16 +17,13 @@
 package org.apache.camel.component.rabbitmq;
 
 import java.io.IOException;
-import java.util.Collection;
 
 import com.rabbitmq.client.AMQP;
 import com.rabbitmq.client.Channel;
 import com.rabbitmq.client.Connection;
 import com.rabbitmq.client.QueueingConsumer;
-import org.apache.camel.Endpoint;
 import org.apache.camel.Exchange;
 import org.apache.camel.Message;
-import org.apache.camel.impl.DefaultEndpoint;
 import org.apache.camel.impl.DefaultProducer;
 import org.apache.camel.spi.UuidGenerator;
 import org.slf4j.Logger;
@@ -50,22 +47,29 @@ public class RabbitMQProducer extends DefaultProducer {
 
     }
 
+    @Override
+    protected void doStart() throws Exception {
+        super.doStart();
+    }
+
+    @Override
+    protected void doStop() throws Exception {
+        super.doStop();
+    }
+
     public void process(Exchange exchange) throws Exception {
 
         String body = exchange.getIn().getBody(String.class);
         LOG.trace("Sending request [{}] from exchange [{}]...", body, exchange);
-        RabitMQConfiguration config = endpoint.getConfiguration();
+        RabbitMQConfiguration config = endpoint.getConfiguration();
         createChannel();
         String routingKey = getRoutingKey(exchange.getIn(), config);
 
-        System.out.println("Routing tee: " + routingKey);
         if (!(routingKey != null && !config.getQueue().isEmpty())) {
-            System.out.println("hrm");
             configureChannel(config, channel);
         }
 
         if (config.isRpc()) {
-            System.out.println("=-=-=-=-=-=-=-=-00000==-=-=-=-=-=-=-=-=-=");
             String replyQueueName = channel.queueDeclare().getQueue();
 
             consumer = new QueueingConsumer(channel);
@@ -91,46 +95,54 @@ public class RabbitMQProducer extends DefaultProducer {
                     break;
                 }
             }
-            System.out.println("Got the REPLY: " + response);
         } else {
+            if (body == null || body.length() == 0) {
+                throw new Exception("Message body is null");
+            }
             channel.basicPublish(config.getExchange(), routingKey, config.getMessageProperties(), body.getBytes());
+            // todo figure out why this crashes after 65535 publishes
         }
 
         Message message = getMessageForResponse(exchange);
-
-        // todo set any headers?
-
-//        channel.close();
     }
 
 
-    private void processAck(Exchange exchange) {
-        // get the originating endpoint ID
-        String endpointID = exchange.getIn().getHeader(RabbitMQConstants.ENDPOINT_ID, String.class);
-        Collection<Endpoint> endpoints = endpoint.getCamelContext().getEndpoints();
-        for (Endpoint ep : endpoints) {
-            if (ep instanceof DefaultEndpoint && endpointID.equals(((DefaultEndpoint) ep).getId())) {
-                Connection connection = ((RabbitMQEndpoint) ep).getConnection();
-                // todo add ack
-                String tag = exchange.getIn().getHeader(RabbitMQConstants.DELIVERY_TAG, String.class);
 
+    private void createChannel() throws Exception {
+        if (channel == null) {
+
+            Connection connection = endpoint.getConnection();
+            RabbitMQConfiguration config = endpoint.getConfiguration();
+
+            channel = connection.createChannel();
+
+            System.out.println("-------------- Producer ----------------------");
+            System.out.println(config.toString());
+            System.out.println("------------------------------------");
+
+            if (!config.getExchange().isEmpty()) {
+                channel.exchangeDeclare(config.getExchange(), config.getExchangeType());
+                String queueName = channel.queueDeclare().getQueue();
+                if (config.getBindingKeys().size() > 0) {
+                    setBindingKeys(config, queueName);
+                } else {
+                    channel.queueBind(queueName, config.getExchange(), "");
+                }
+            } else {
+                String queueName = config.getQueue();
+                channel.queueDeclare(queueName, config.getDurable(), false, false, null);
             }
         }
     }
 
-
-    private void createChannel() throws Exception {
-        Connection connection = endpoint.getConnection();
-        RabitMQConfiguration configuration = endpoint.getConfiguration();
-
-        channel = connection.createChannel();
-
-        System.out.println("-------------- Producer ----------------------");
-        System.out.println(configuration.toString());
-        System.out.println("------------------------------------");
+    // todo move to endpoitn dupe code
+    private void setBindingKeys(RabbitMQConfiguration config, String queueName) throws IOException {
+        for (String bindingKey : config.getBindingKeys()) {
+            channel.queueBind(queueName, config.getExchange(), bindingKey);
+        }
     }
 
-    private void configureChannel(RabitMQConfiguration config, Channel channel) throws IOException {
+    private void configureChannel(RabbitMQConfiguration config, Channel channel) throws IOException {
 
         if (!config.getExchange().isEmpty()) {
             channel.exchangeDeclare(config.getExchange(), config.getExchangeType());
@@ -139,7 +151,7 @@ public class RabbitMQProducer extends DefaultProducer {
         }
     }
 
-    private String getRoutingKey(Message msg, RabitMQConfiguration config) {
+    private String getRoutingKey(Message msg, RabbitMQConfiguration config) {
         String key = config.getRoutingKey();
 
         String header = (String) msg.getHeader(RabbitMQConstants.ROUTING_KEY);

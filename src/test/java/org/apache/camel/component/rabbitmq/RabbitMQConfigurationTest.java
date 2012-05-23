@@ -29,7 +29,7 @@ public class RabbitMQConfigurationTest extends CamelTestSupport {
         RabbitMQComponent component = new RabbitMQComponent(context);
         RabbitMQEndpoint endpoint = (RabbitMQEndpoint) component.createEndpoint("rabbitmq://localhost");
 
-        RabitMQConfiguration config = endpoint.getConfiguration();
+        RabbitMQConfiguration config = endpoint.getConfiguration();
 
         assertEquals("localhost", config.getHost());
         assertEquals(-1, config.getPort());
@@ -41,7 +41,7 @@ public class RabbitMQConfigurationTest extends CamelTestSupport {
         RabbitMQEndpoint endpoint = (RabbitMQEndpoint) component.createEndpoint(BASIC_URI);
 
 
-        RabitMQConfiguration config = endpoint.getConfiguration();
+        RabbitMQConfiguration config = endpoint.getConfiguration();
         checkBaseConfig(config);
     }
 
@@ -51,7 +51,7 @@ public class RabbitMQConfigurationTest extends CamelTestSupport {
         RabbitMQEndpoint endpoint = (RabbitMQEndpoint) component.createEndpoint(BASIC_URI + "?queue=myqueue");
 
 
-        RabitMQConfiguration config = endpoint.getConfiguration();
+        RabbitMQConfiguration config = endpoint.getConfiguration();
         checkBaseConfig(config);
 
         assertEquals("myqueue", config.getQueue());
@@ -63,7 +63,7 @@ public class RabbitMQConfigurationTest extends CamelTestSupport {
         RabbitMQComponent component = new RabbitMQComponent(context);
         RabbitMQEndpoint endpoint = (RabbitMQEndpoint) component.createEndpoint(BASIC_URI + "?timeout=420");
 
-        RabitMQConfiguration config = endpoint.getConfiguration();
+        RabbitMQConfiguration config = endpoint.getConfiguration();
         assertEquals(420, config.getTimeout());
         checkBaseConfig(config);
     }
@@ -73,7 +73,7 @@ public class RabbitMQConfigurationTest extends CamelTestSupport {
         RabbitMQComponent component = new RabbitMQComponent(context);
         RabbitMQEndpoint endpoint = (RabbitMQEndpoint) component.createEndpoint(BASIC_URI + "?timeout=420&requestedChannelMax=3&requestedFrameMax=4&requestedHeartbeat=5");
 
-        RabitMQConfiguration config = endpoint.getConfiguration();
+        RabbitMQConfiguration config = endpoint.getConfiguration();
         assertEquals(420, config.getTimeout());
         assertEquals(3, config.getRequestedChannelMax());
         assertEquals(4, config.getRequestedFrameMax());
@@ -86,7 +86,7 @@ public class RabbitMQConfigurationTest extends CamelTestSupport {
         RabbitMQComponent component = new RabbitMQComponent(context);
         RabbitMQEndpoint endpoint = (RabbitMQEndpoint) component.createEndpoint(BASIC_URI + "?durable=true&autoDelete=true&prefetchCount=93");
 
-        RabitMQConfiguration config = endpoint.getConfiguration();
+        RabbitMQConfiguration config = endpoint.getConfiguration();
         assertTrue(config.getDurable());
         assertTrue(config.getAutoDelete());
         assertEquals(93, config.getPrefetch());
@@ -98,14 +98,14 @@ public class RabbitMQConfigurationTest extends CamelTestSupport {
         RabbitMQComponent component = new RabbitMQComponent(context);
         RabbitMQEndpoint endpoint = (RabbitMQEndpoint) component.createEndpoint(BASIC_URI + "?messageProperties=BASIC");
 
-        RabitMQConfiguration config = endpoint.getConfiguration();
+        RabbitMQConfiguration config = endpoint.getConfiguration();
         assertEquals(MessageProperties.BASIC, config.getMessageProperties());
         checkBaseConfig(config);
 
     }
 
 
-    private void checkBaseConfig(RabitMQConfiguration config) {
+    private void checkBaseConfig(RabbitMQConfiguration config) {
         assertEquals("juicelabs.com", config.getHost());
         assertEquals("jpk", config.getUserName());
         assertEquals(1234, config.getPort());
