@@ -65,12 +65,12 @@ public class RabbitMQProducer extends DefaultProducer implements AsyncProcessor 
     }
 
     @Override
-    public boolean process(Exchange exchange, AsyncCallback asyncCallback) {
+    public boolean process(Exchange exchange, AsyncCallback callback) {
         try {
             send(exchange);
-
         } catch (Exception e) {
-
+            exchange.setException(e);
+            callback.done(true);
         }
         return true;
     }
@@ -104,23 +104,31 @@ public class RabbitMQProducer extends DefaultProducer implements AsyncProcessor 
 
             channel.basicPublish(config.getExchange(), routingKey, props, body.getBytes());
 
-            String response;
-            while (true) {
-                QueueingConsumer.Delivery delivery = consumer.nextDelivery();
-                if (delivery.getProperties().getCorrelationId().equals(corrId)) {
-                    response = new String(delivery.getBody());
-                    exchange.getOut().setBody(response);
-                    break;
-                }
-            }
+            String response = waitForReply(exchange, corrId);
+            exchange.getOut().setBody(response);
+
         } else {
             if (body == null || body.length() == 0) {
-                throw new Exception("Message body is null");
+                exchange.setException(new Exception("Message body is null"));
+                return;
             }
             channel.basicPublish(config.getExchange(), routingKey, config.getMessageProperties(), body.getBytes());
         }
 
         Message message = getMessageForResponse(exchange);
+    }
+
+    private String waitForReply(Exchange exchange, String corrId) throws InterruptedException {
+        String response;
+        while (true) {
+            QueueingConsumer.Delivery delivery = consumer.nextDelivery();
+            if (delivery.getProperties().getCorrelationId().equals(corrId)) {
+                response = new String(delivery.getBody());
+                exchange.getOut().setBody(response);
+                break;
+            }
+        }
+        return response;
     }
 
 

@@ -33,9 +33,7 @@ public interface RabbitMQConstants {
         TEXT_PLAIN(com.rabbitmq.client.MessageProperties.TEXT_PLAIN);
 
 
-        private String name;
         BasicProperties property;
-
 
         private MessageProperties(BasicProperties property) {
             this.property = property;

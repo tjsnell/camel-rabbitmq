@@ -85,7 +85,7 @@ public class RabbitMQEndpoint extends DefaultEndpoint {
     public Exchange createExchange(Envelope envelope, AMQP.BasicProperties props, byte[] body) {
         Exchange exchange = new DefaultExchange(this, getExchangePattern());
         Message message = exchange.getIn();
-        message.setBody(body);
+        message.setBody(new String(body));
 
         setEnvelopeHeaders(envelope, message);
         setPropertiesHeaders(props, message);

@@ -130,7 +130,6 @@ public class RabbitMQConsumer extends DefaultConsumer {
             long deliveryTag = envelope.getDeliveryTag();
 
             Exchange exchange = endpoint.createExchange(envelope, properties, body);
-
             exchange.addOnCompletion(new Completion(channel));
             try {
                 getProcessor().process(exchange);
@@ -159,6 +158,7 @@ public class RabbitMQConsumer extends DefaultConsumer {
                     try {
                         channel.basicAck(tag, false);
                     } catch (IOException e) {
+                        exchange.setException(e);
                     }
                 }
 
