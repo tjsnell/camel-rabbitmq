@@ -17,6 +17,7 @@
 package org.apache.camel.component.rabbitmq;
 
 import java.io.IOException;
+import java.util.concurrent.ExecutorService;
 
 import com.rabbitmq.client.AMQP;
 import com.rabbitmq.client.Channel;
@@ -103,6 +104,18 @@ public class RabbitMQEndpoint extends DefaultEndpoint {
 
     }
 
+    @Override
+    public RabbitMQComponent getComponent() {
+        return (RabbitMQComponent) super.getComponent();
+    }
+
+    protected ExecutorService getAsyncStartStopExecutorService() {
+        if (getComponent() == null) {
+            throw new IllegalStateException("AsyncStartStopListener requires JmsComponent to be configured on this endpoint: " + this);
+        }
+        // use shared thread pool from component
+        return getComponent().getAsyncStartStopExecutorService();
+    }
 
     /**
      * Map the AMQP Properties to headers

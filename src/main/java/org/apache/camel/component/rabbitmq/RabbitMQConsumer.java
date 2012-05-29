@@ -40,6 +40,7 @@ public class RabbitMQConsumer extends DefaultConsumer {
     //    private Channel channel;
     private String queueName;
     private MyConsumer myConsumer;
+    private Channel channel;
 
 
     public RabbitMQConsumer(RabbitMQEndpoint endpoint, Processor processor) throws Exception {
@@ -48,22 +49,30 @@ public class RabbitMQConsumer extends DefaultConsumer {
         setupMQ();
 
         final RabbitMQConfiguration config = endpoint.getConfiguration();
-        for (int i = 0; i < config.getConcurrentConsumers(); i++) {
-            Runnable consumerThread = new Runnable() {
+        channel = createChannel();
+        myConsumer = new MyConsumer(channel);
+
+        if (config.isAsyncConsumer()) {
+            endpoint.getAsyncStartStopExecutorService().submit(new Runnable() {
+
+
                 @Override
                 public void run() {
                     try {
-                        Channel channel = createChannel();
-                        myConsumer = new MyConsumer(channel);
                         channel.basicConsume(queueName, config.isAutoAck(), myConsumer);
                     } catch (IOException e) {
                         e.printStackTrace();
                     }
                 }
-            };
-            Thread thread = new Thread(consumerThread);
-            thread.start();
-        }
+
+                @Override
+                public String toString() {
+                    return "AsyncStartListenerTask[" + queueName + "]";
+                }
+            });
+        } else
+            channel.basicConsume(queueName, config.isAutoAck(), myConsumer);
+
     }
 
     private void setupMQ() throws Exception {
@@ -110,6 +119,7 @@ public class RabbitMQConsumer extends DefaultConsumer {
     public class MyConsumer extends com.rabbitmq.client.DefaultConsumer {
 
         Channel channel;
+
         /**
          * Constructs a new instance and records its association to the passed-in channel.
          *
@@ -225,7 +235,9 @@ public class RabbitMQConsumer extends DefaultConsumer {
 
         Channel channel = connection.createChannel();
 
-        channel.basicQos(configuration.getPrefetch());
+        if (configuration.getPrefetch() > 0) {
+            channel.basicQos(configuration.getPrefetch());
+        }
         return channel;
     }
 

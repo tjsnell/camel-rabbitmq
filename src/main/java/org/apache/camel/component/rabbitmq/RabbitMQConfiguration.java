@@ -42,7 +42,7 @@ public class RabbitMQConfiguration {
     /**
      * maximum number of messages that the server will deliver, 0 if unlimited
      */
-    private int prefetch;
+    private int prefetch = 0;
 
     private String routingKey = "";
     private String exchange = "";
@@ -52,8 +52,8 @@ public class RabbitMQConfiguration {
 
     // consumer only
     private List<String> bindingKeys = new ArrayList<String>();
+    private boolean asyncConsumer;
 
-    private String bindingKey = "";
     private String exchangeType = "";
 
     private AMQP.BasicProperties properties;
@@ -260,6 +260,14 @@ public class RabbitMQConfiguration {
 
     public void setConcurrentConsumers(int concurrentConsumers) {
         this.concurrentConsumers = concurrentConsumers;
+    }
+
+    public boolean isAsyncConsumer() {
+        return asyncConsumer;
+    }
+
+    public void setAsyncConsumer(boolean asyncConsumer) {
+        this.asyncConsumer = asyncConsumer;
     }
 
     public String toString() {

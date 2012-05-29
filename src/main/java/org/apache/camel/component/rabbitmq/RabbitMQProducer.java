@@ -112,7 +112,13 @@ public class RabbitMQProducer extends DefaultProducer implements AsyncProcessor 
                 exchange.setException(new Exception("Message body is null"));
                 return;
             }
-            channel.basicPublish(config.getExchange(), routingKey, config.getMessageProperties(), body.getBytes());
+
+            AMQP.BasicProperties props = config.getMessageProperties();
+            if (props == null) {
+                props = new AMQP.BasicProperties();
+            }
+            props = props.builder().messageId(exchange.getIn().getMessageId()).build();
+            channel.basicPublish(config.getExchange(), routingKey, props, body.getBytes());
         }
 
         Message message = getMessageForResponse(exchange);

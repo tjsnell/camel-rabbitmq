@@ -18,6 +18,7 @@ package org.apache.camel.component.rabbitmq;
 
 import java.net.URI;
 import java.util.Map;
+import java.util.concurrent.ExecutorService;
 
 import org.apache.camel.CamelContext;
 import org.apache.camel.Endpoint;
@@ -28,6 +29,8 @@ import org.apache.camel.util.ObjectHelper;
  * Represents the component that manages {@link RabbitMQEndpoint}.
  */
 public class RabbitMQComponent extends DefaultComponent {
+
+    private ExecutorService asyncStartStopExecutorService;
 
     public RabbitMQComponent() {
 
@@ -53,6 +56,16 @@ public class RabbitMQComponent extends DefaultComponent {
         setProperties(endpoint, parameters);
         return endpoint;
     }
+
+    protected synchronized ExecutorService getAsyncStartStopExecutorService() {
+        if (asyncStartStopExecutorService == null) {
+            // use a cached thread pool for async start tasks as they can run for a while, and we need a dedicated thread
+            // for each task, and the thread pool will shrink when no more tasks running
+            asyncStartStopExecutorService = getCamelContext().getExecutorServiceManager().newCachedThreadPool(this, "AsyncStartStopListener");
+        }
+        return asyncStartStopExecutorService;
+    }
+
 
     private void configure(RabbitMQConfiguration config, URI uri) {
         // UserInfo can contain both username and password as: user:pwd@ftpserver
