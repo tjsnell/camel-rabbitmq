@@ -17,6 +17,7 @@
 package org.apache.camel.component.rabbitmq;
 
 import java.io.IOException;
+import java.util.concurrent.ExecutorService;
 
 import com.rabbitmq.client.AMQP;
 import com.rabbitmq.client.Channel;
@@ -26,6 +27,7 @@ import org.apache.camel.Exchange;
 import org.apache.camel.Message;
 import org.apache.camel.Processor;
 import org.apache.camel.impl.DefaultConsumer;
+import org.apache.camel.spi.ExecutorServiceManager;
 import org.apache.camel.spi.Synchronization;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -37,10 +39,9 @@ public class RabbitMQConsumer extends DefaultConsumer {
     private static final transient Logger LOG = LoggerFactory.getLogger(RabbitMQConsumer.class);
 
     private final RabbitMQEndpoint endpoint;
-    //    private Channel channel;
     private String queueName;
-    private MyConsumer myConsumer;
-    private Channel channel;
+//    private MyConsumer myConsumer;
+//    private Channel channel;
 
 
     public RabbitMQConsumer(RabbitMQEndpoint endpoint, Processor processor) throws Exception {
@@ -49,30 +50,36 @@ public class RabbitMQConsumer extends DefaultConsumer {
         setupMQ();
 
         final RabbitMQConfiguration config = endpoint.getConfiguration();
-        channel = createChannel();
-        myConsumer = new MyConsumer(channel);
 
-        if (config.isAsyncConsumer()) {
-            endpoint.getAsyncStartStopExecutorService().submit(new Runnable() {
+        int concurrentConsumers = endpoint.getConfiguration().getConcurrentConsumers();
 
+        ExecutorServiceManager manager = endpoint.getCamelContext().getExecutorServiceManager();
 
-                @Override
-                public void run() {
-                    try {
-                        channel.basicConsume(queueName, config.isAutoAck(), myConsumer);
-                    } catch (IOException e) {
-                        e.printStackTrace();
-                    }
+        Runnable consumerRunner = new Runnable() {
+
+            @Override
+            public void run() {
+                try {
+                    System.out.println("Launching: " + Thread.currentThread().getId());
+                    Channel channel = createChannel();
+                    MyConsumer myConsumer = new MyConsumer(channel);
+                    channel.basicConsume(queueName, config.isAutoAck(), myConsumer);
+                } catch (IOException e) {
+                    e.printStackTrace();
                 }
+            }
 
-                @Override
-                public String toString() {
-                    return "AsyncStartListenerTask[" + queueName + "]";
-                }
-            });
-        } else
-            channel.basicConsume(queueName, config.isAutoAck(), myConsumer);
+            @Override
+            public String toString() {
+                return "AsyncStartListenerTask[" + queueName + "]";
+            }
+        };
 
+        ExecutorService executor = manager.newFixedThreadPool(consumerRunner, endpoint.getEndpointUri(), concurrentConsumers);
+
+        for (int i = 0; i < concurrentConsumers; i++) {
+            executor.execute(consumerRunner);
+        }
     }
 
     private void setupMQ() throws Exception {
@@ -80,7 +87,7 @@ public class RabbitMQConsumer extends DefaultConsumer {
 
         RabbitMQConfiguration config = endpoint.getConfiguration();
 
-        System.out.println("========== Consumer ======================");
+        System.out.println("========== Consumer ============");
         System.out.println(config.toString());
         System.out.println("================================");
 
@@ -135,9 +142,9 @@ public class RabbitMQConsumer extends DefaultConsumer {
                                    Envelope envelope,
                                    AMQP.BasicProperties properties,
                                    byte[] body) throws IOException {
-            String routingKey = envelope.getRoutingKey();
-            String contentType = properties.getContentType();
-            long deliveryTag = envelope.getDeliveryTag();
+//            String routingKey = envelope.getRoutingKey();
+//            String contentType = properties.getContentType();
+//            long deliveryTag = envelope.getDeliveryTag();
 
             Exchange exchange = endpoint.createExchange(envelope, properties, body);
             exchange.addOnCompletion(new Completion(channel));
