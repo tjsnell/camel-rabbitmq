@@ -40,8 +40,8 @@ public class RabbitMQConsumer extends DefaultConsumer {
 
     private final RabbitMQEndpoint endpoint;
     private String queueName;
-//    private MyConsumer myConsumer;
-//    private Channel channel;
+    private ExecutorService executor;
+    private MyConsumer myConsumer;
 
 
     public RabbitMQConsumer(RabbitMQEndpoint endpoint, Processor processor) throws Exception {
@@ -49,37 +49,10 @@ public class RabbitMQConsumer extends DefaultConsumer {
         this.endpoint = endpoint;
         setupMQ();
 
-        final RabbitMQConfiguration config = endpoint.getConfiguration();
-
         int concurrentConsumers = endpoint.getConfiguration().getConcurrentConsumers();
-
         ExecutorServiceManager manager = endpoint.getCamelContext().getExecutorServiceManager();
-
-        Runnable consumerRunner = new Runnable() {
-
-            @Override
-            public void run() {
-                try {
-                    System.out.println("Launching: " + Thread.currentThread().getId());
-                    Channel channel = createChannel();
-                    MyConsumer myConsumer = new MyConsumer(channel);
-                    channel.basicConsume(queueName, config.isAutoAck(), myConsumer);
-                } catch (IOException e) {
-                    e.printStackTrace();
-                }
-            }
-
-            @Override
-            public String toString() {
-                return "AsyncStartListenerTask[" + queueName + "]";
-            }
-        };
-
-        ExecutorService executor = manager.newFixedThreadPool(consumerRunner, endpoint.getEndpointUri(), concurrentConsumers);
-
-        for (int i = 0; i < concurrentConsumers; i++) {
-            executor.execute(consumerRunner);
-        }
+        myConsumer= new MyConsumer();
+        executor = manager.newFixedThreadPool(myConsumer, endpoint.getEndpointUri(), concurrentConsumers);
     }
 
     private void setupMQ() throws Exception {
@@ -107,13 +80,18 @@ public class RabbitMQConsumer extends DefaultConsumer {
     }
 
     @Override
-    protected void doStart() {
+    protected void doStart() throws Exception {
+        super.doStart();
+        System.out.println("STARTING");
+        for (int i = 0; i < endpoint.getConfiguration().getConcurrentConsumers(); i++) {
+            executor.execute(myConsumer);
+        }
 
     }
 
     @Override
-    protected void doStop() {
-
+    protected void doStop() throws Exception {
+        super.doStop();
     }
 
     private void setBindingKeys(RabbitMQConfiguration config, Channel channel) throws IOException {
@@ -123,34 +101,50 @@ public class RabbitMQConsumer extends DefaultConsumer {
     }
 
 
-    public class MyConsumer extends com.rabbitmq.client.DefaultConsumer {
+    public class MyConsumer  implements Runnable {
 
-        Channel channel;
+        private Channel channel;
+        private com.rabbitmq.client.DefaultConsumer rabbitMQConsumer;
 
         /**
          * Constructs a new instance and records its association to the passed-in channel.
          *
-         * @param channel the channel to which this consumer is attached
          */
-        public MyConsumer(Channel channel) {
-            super(channel);
-            this.channel = channel;
-        }
+        public MyConsumer() {
 
-        @Override
-        public void handleDelivery(String consumerTag,
-                                   Envelope envelope,
-                                   AMQP.BasicProperties properties,
-                                   byte[] body) throws IOException {
+            try {
+                channel = createChannel();
+                rabbitMQConsumer = new com.rabbitmq.client.DefaultConsumer(createChannel()) {
+                    @Override
+                    public void handleDelivery(String consumerTag,
+                                               Envelope envelope,
+                                               AMQP.BasicProperties properties,
+                                               byte[] body) throws IOException {
 //            String routingKey = envelope.getRoutingKey();
 //            String contentType = properties.getContentType();
 //            long deliveryTag = envelope.getDeliveryTag();
 
-            Exchange exchange = endpoint.createExchange(envelope, properties, body);
-            exchange.addOnCompletion(new Completion(channel));
+                        Exchange exchange = endpoint.createExchange(envelope, properties, body);
+                        exchange.addOnCompletion(new Completion(channel));
+                        try {
+                            getProcessor().process(exchange);
+                        } catch (Exception e) {
+                            e.printStackTrace();
+                        }
+                    }
+                };
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
+
+
+        @Override
+        public void run() {
             try {
-                getProcessor().process(exchange);
-            } catch (Exception e) {
+                System.out.println("Starting thread: " + Thread.currentThread().getName());
+                channel.basicConsume(queueName, endpoint.getConfiguration().isAutoAck(), rabbitMQConsumer);
+            } catch (IOException e) {
                 e.printStackTrace();
             }
         }
@@ -165,6 +159,7 @@ public class RabbitMQConsumer extends DefaultConsumer {
         public Completion(Channel channel) {
             this.channel = channel;
         }
+
 
         @Override
         public void onComplete(Exchange exchange) {
